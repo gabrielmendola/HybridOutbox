@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="AWSSDK.DynamoDBv2" Version="4.0.15"/>
+        <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" Version="4.0.3.23"/>
+        <PackageReference Include="MassTransit.RabbitMQ" Version="8.2.5"/>
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\HybridOutbox\HybridOutbox.csproj"/>
+        <ProjectReference Include="..\..\src\HybridOutbox.DynamoDb\HybridOutbox.DynamoDb.csproj"/>
+        <ProjectReference Include="..\..\src\HybridOutbox.MassTransit\HybridOutbox.MassTransit.csproj"/>
+    </ItemGroup>
+
+</Project>

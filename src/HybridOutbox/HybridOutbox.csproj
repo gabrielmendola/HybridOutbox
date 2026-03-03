@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <PackageId>HybridOutbox</PackageId>
+        <Version>1.0.0</Version>
+        <Authors>Gabriel Mendola</Authors>
+        <Description>Transactional outbox for .NET with dual-path dispatch: immediate in-memory delivery plus a background recovery job for guaranteed at-least-once delivery.</Description>
+        <PackageTags>outbox;transactional-outbox;messaging;reliability</PackageTags>
+        <PackageProjectUrl>https://github.com/gabrielmendola/hybridoutbox</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/gabrielmendola/hybridoutbox</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <NoWarn>1591</NoWarn>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="8.*"/>
+        <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="8.*"/>
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.*"/>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.*"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="HybridOutbox.MassTransit"/>
+        <InternalsVisibleTo Include="HybridOutbox.Tests"/>
+        <InternalsVisibleTo Include="HybridOutbox.MassTransit.Tests"/>
+        <InternalsVisibleTo Include="HybridOutbox.DynamoDb.IntegrationTests"/>
+        <InternalsVisibleTo Include="HybridOutbox.MassTransit.IntegrationTests"/>
+        <InternalsVisibleTo Include="DynamicProxyGenAssembly2"/>
+    </ItemGroup>
+
+</Project>

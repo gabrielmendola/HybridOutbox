@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <PackageId>HybridOutbox.DynamoDb</PackageId>
+        <Version>1.0.0</Version>
+        <Authors>Gabriel Mendola</Authors>
+        <Description>AWS DynamoDB persistence provider for HybridOutbox. Includes the outbox table initializer, recovery repository, and distributed job lock via DynamoDB conditional writes.</Description>
+        <PackageTags>outbox;dynamodb;aws;messaging;reliability</PackageTags>
+        <PackageProjectUrl>https://github.com/gabrielmendola/hybridoutbox</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/gabrielmendola/hybridoutbox</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <NoWarn>1591</NoWarn>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\HybridOutbox\HybridOutbox.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="HybridOutbox.DynamoDb.Tests"/>
+        <InternalsVisibleTo Include="DynamicProxyGenAssembly2"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="AWSSDK.DynamoDBv2" Version="4.0.15"/>
+        <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" Version="4.0.3.23"/>
+    </ItemGroup>
+
+</Project>

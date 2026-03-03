@@ -1,0 +1,17 @@
+**/.dockerignore
+**/.git
+**/.gitignore
+**/.vs
+**/.vscode
+**/.idea
+**/*.*proj.user
+**/*.dbmdl
+**/*.jfm
+**/bin
+**/obj
+**/out
+**/logs
+**/secrets.dev.yaml
+**/values.dev.yaml
+LICENSE
+README.md
