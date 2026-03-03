@@ -74,6 +74,13 @@ dotnet add package HybridOutbox.MassTransit
 ```csharp
 // Program.cs
 
+// Register the AWS DynamoDB client and document context.
+builder.Services.AddSingleton<IAmazonDynamoDB>(_ => new AmazonDynamoDBClient());
+builder.Services.AddSingleton<IDynamoDBContext>(sp =>
+    new DynamoDBContextBuilder()
+        .WithDynamoDBClient(() => sp.GetRequiredService<IAmazonDynamoDB>())
+        .Build());
+
 builder.Services
     .AddHybridOutbox()
     .AddDynamoDb(options =>
@@ -84,8 +91,13 @@ builder.Services
 
 builder.Services.AddMassTransit(x =>
 {
-    x.AddHybridOutbox(); // intercepts Publish/Send in ALL scopes (HTTP handlers and consumers)
+    x.AddHybridOutbox(); // intercepts Publish/Send in HTTP handler scopes
     x.AddConsumer<MyConsumer>();
+
+    // Apply the outbox consume filter to every consumer endpoint.
+    // Without this, consumer-side context.Publish bypasses the outbox.
+    x.AddConfigureEndpointsCallback((ctx, _, cfg) => cfg.UseHybridOutbox(ctx));
+
     x.UsingRabbitMq((ctx, cfg) => cfg.ConfigureEndpoints(ctx));
 });
 ```
