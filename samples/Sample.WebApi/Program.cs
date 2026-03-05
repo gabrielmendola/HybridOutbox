@@ -29,10 +29,7 @@ builder.Services.AddSingleton<OrderRepository>();
 builder.Services.AddSingleton<AuditLogRepository>();
 
 builder.Services
-    .AddHybridOutbox(options =>
-    {
-        options.Inbox.Enabled = false;
-    })
+    .AddHybridOutbox()
     .AddDynamoDb(options =>
     {
         // Single-table mode: all entity types share one DynamoDB table.
