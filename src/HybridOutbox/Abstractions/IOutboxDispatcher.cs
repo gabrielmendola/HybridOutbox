@@ -1,5 +1,3 @@
-using HybridOutbox.Internals;
-
 namespace HybridOutbox.Abstractions;
 
 public interface IOutboxDispatcher

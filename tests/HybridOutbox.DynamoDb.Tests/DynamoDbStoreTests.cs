@@ -13,21 +13,23 @@ namespace HybridOutbox.DynamoDb.Tests;
 public sealed class DynamoDbStoreTests
 {
     private readonly IDynamoDBContext _context = Substitute.For<IDynamoDBContext>();
+
     private readonly ITransactWrite<DynamoDbOutboxMessage> _transactWrite =
         Substitute.For<ITransactWrite<DynamoDbOutboxMessage>>();
 
-    private DynamoDbStore CreateStore(DynamoDbOutboxOptions? options = null)
+    private DynamoDbOutboxContext CreateStore(DynamoDbOutboxOptions? options = null)
     {
         options ??= new DynamoDbOutboxOptions { TableName = "TestTable" };
 
         _context.CreateTransactWrite<DynamoDbOutboxMessage>(Arg.Any<TransactWriteConfig>())
             .Returns(_transactWrite);
 
-        return new DynamoDbStore(
+        return new DynamoDbOutboxContext(
             _context,
             Options.Create(options),
+            Options.Create(new DynamoDbInboxOptions()),
             Channel.CreateUnbounded<OutboxMessage>().Writer,
-            Substitute.For<ILogger<OutboxStore>>());
+            Substitute.For<ILogger<OutboxContext>>());
     }
 
     private List<DynamoDbOutboxMessage> CaptureAddSaveItemsArgument()
@@ -39,13 +41,19 @@ public sealed class DynamoDbStoreTests
         return captured;
     }
 
-    private static OutboxMessage SampleMessage(string id = "msg-1") => new()
+    private static readonly Guid MsgId1 = new("00000000-0000-0000-0000-000000000001");
+    private static readonly Guid MsgId2 = new("00000000-0000-0000-0000-000000000002");
+
+    private static OutboxMessage SampleMessage(Guid? id = null)
     {
-        MessageId = id,
-        DestinationAddress = "queue://test",
-        Body = "{}",
-        ContentType = "application/json"
-    };
+        return new OutboxMessage
+        {
+            MessageId = id ?? Guid.NewGuid(),
+            DestinationAddress = "queue://test",
+            Body = "{}",
+            ContentType = "application/json"
+        };
+    }
 
     [Fact]
     public void GetTransactWrite_SetsExpiresAt_WhenRetentionPeriodConfigured()
@@ -88,25 +96,26 @@ public sealed class DynamoDbStoreTests
     public void GetTransactWrite_AddsOneRecordPerPendingMessage()
     {
         var store = CreateStore();
-        store.Add(SampleMessage("msg-1"));
-        store.Add(SampleMessage("msg-2"));
+        store.Add(SampleMessage(MsgId1));
+        store.Add(SampleMessage(MsgId2));
 
         var captured = CaptureAddSaveItemsArgument();
         store.GetTransactWrite();
 
         captured.Should().HaveCount(2);
-        captured.Should().Contain(m => m.MessageId == "msg-1");
-        captured.Should().Contain(m => m.MessageId == "msg-2");
+        captured.Should().Contain(m => m.PK == MsgId1);
+        captured.Should().Contain(m => m.PK == MsgId2);
     }
 
     [Fact]
-    public void GetTransactWrite_ReturnsTransactWriteFromContext()
+    public void GetTransactWrite_ReturnsOnlyOutboxWrite_WhenNoInboxStaged()
     {
         var store = CreateStore();
         store.Add(SampleMessage());
 
         var result = store.GetTransactWrite();
 
-        result.Should().BeSameAs(_transactWrite);
+        result.Should().HaveCount(1);
+        result[0].Should().BeSameAs(_transactWrite);
     }
 }

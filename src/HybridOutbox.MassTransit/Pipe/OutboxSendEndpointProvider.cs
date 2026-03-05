@@ -6,23 +6,23 @@ namespace HybridOutbox.MassTransit.Pipe;
 internal sealed class OutboxSendEndpointProvider : ISendEndpointProvider
 {
     private readonly ISendEndpointProvider _sendEndpointProvider;
-    private readonly IOutboxStore _store;
-    private readonly OutboxDispatchContext _dispatchContext;
+    private readonly IServiceProvider _provider;
+    private readonly IOutboxContext _outboxContext;
 
     internal OutboxSendEndpointProvider(
         ISendEndpointProvider sendEndpointProvider,
-        IOutboxStore store,
-        OutboxDispatchContext dispatchContext)
+        IServiceProvider provider,
+        IOutboxContext outboxContext)
     {
         _sendEndpointProvider = sendEndpointProvider;
-        _store = store;
-        _dispatchContext = dispatchContext;
+        _provider = provider;
+        _outboxContext = outboxContext;
     }
 
     public async Task<ISendEndpoint> GetSendEndpoint(Uri address)
     {
         var endpoint = await _sendEndpointProvider.GetSendEndpoint(address).ConfigureAwait(false);
-        return new OutboxSendEndpoint(endpoint, _store, _dispatchContext, address, false);
+        return new OutboxSendEndpoint(endpoint, _provider, _outboxContext);
     }
 
     public ConnectHandle ConnectSendObserver(ISendObserver observer)

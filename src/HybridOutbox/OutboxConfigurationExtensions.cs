@@ -13,14 +13,14 @@ public static class OutboxConfigurationExtensions
 {
     public static OutboxConfigurator AddHybridOutbox(
         this IServiceCollection services,
-        Action<OutboxOptions>? configure = null)
+        Action<OutboxOptions>? configureOptions = null)
     {
         var optionsBuilder = services
             .AddOptions<OutboxOptions>()
             .BindConfiguration(OutboxOptions.SectionName);
 
-        if (configure is not null)
-            optionsBuilder.Configure(configure);
+        if (configureOptions is not null)
+            optionsBuilder.Configure(configureOptions);
 
         services.TryAddSingleton(sp =>
         {
@@ -43,12 +43,12 @@ public static class OutboxConfigurationExtensions
         services.TryAddSingleton(sp => sp.GetRequiredService<Channel<OutboxMessage>>().Writer);
         services.TryAddSingleton(sp => sp.GetRequiredService<Channel<OutboxMessage>>().Reader);
 
-        services.TryAddSingleton<OutboxDispatchContext>();
         services.TryAddSingleton<IOutboxJobLock, NoOpJobLock>();
+        services.TryAddSingleton<IInboxRepository, NoOpInboxRepository>();
 
         services.AddHostedService<OutboxInMemory>();
         services.AddHostedService<OutboxJob>();
 
-        return new OutboxConfigurator(services);
+        return new OutboxConfigurator(services, optionsBuilder);
     }
 }

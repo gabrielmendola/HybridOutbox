@@ -11,7 +11,6 @@ internal sealed class OutboxJob : BackgroundService
     private readonly IOutboxRepository _repository;
     private readonly IOutboxDispatcher _dispatcher;
     private readonly IOutboxJobLock _jobLock;
-    private readonly OutboxDispatchContext _dispatchContext;
     private readonly OutboxOptions _options;
     private readonly ILogger<OutboxJob> _logger;
     private readonly string _instanceId = Guid.NewGuid().ToString();
@@ -20,14 +19,12 @@ internal sealed class OutboxJob : BackgroundService
         IOutboxRepository repository,
         IOutboxDispatcher dispatcher,
         IOutboxJobLock jobLock,
-        OutboxDispatchContext dispatchContext,
         IOptions<OutboxOptions> options,
         ILogger<OutboxJob> logger)
     {
         _repository = repository;
         _dispatcher = dispatcher;
         _jobLock = jobLock;
-        _dispatchContext = dispatchContext;
         _options = options.Value;
         _logger = logger;
     }
@@ -115,10 +112,7 @@ internal sealed class OutboxJob : BackgroundService
 
         try
         {
-            using (_dispatchContext.BeginDispatch())
-            {
-                await _dispatcher.DispatchAsync(message, ct);
-            }
+            await _dispatcher.DispatchAsync(message, ct);
 
             await _repository.MarkAsProcessedAsync(message.MessageId, ct);
 

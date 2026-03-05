@@ -7,12 +7,12 @@ public interface IOutboxRepository
         int limit = 100,
         CancellationToken cancellationToken = default);
 
-    Task MarkAsProcessedAsync(string messageId, CancellationToken cancellationToken = default);
+    Task MarkAsProcessedAsync(Guid messageId, CancellationToken cancellationToken = default);
 
     Task<bool> TryAcquireLockAsync(
-        string messageId,
+        Guid messageId,
         TimeSpan lockDuration,
         CancellationToken cancellationToken = default);
 
-    Task ReleaseLockAsync(string messageId, CancellationToken cancellationToken = default);
+    Task ReleaseLockAsync(Guid messageId, CancellationToken cancellationToken = default);
 }

@@ -1,26 +1,20 @@
 using Amazon.DynamoDBv2.DataModel;
 using MassTransit;
+using Sample.WebApi.Data;
 using Sample.WebApi.Entities;
 using Sample.WebApi.Messages;
 
 namespace Sample.WebApi.Consumers;
 
-/// <summary>
-/// Handles the OrderPlaced event that was dispatched by the outbox.
-///
-/// This consumer demonstrates that the downstream event was successfully
-/// delivered (either by the in-memory fast path or the recovery job).
-/// It writes an audit log entry to DynamoDB as proof of receipt.
-/// </summary>
 public class OrderPlacedConsumer : IConsumer<OrderPlaced>
 {
     private readonly ILogger<OrderPlacedConsumer> _logger;
-    private readonly IDynamoDBContext _dynamoDbContext;
+    private readonly UnitOfWork _unitOfWork;
 
-    public OrderPlacedConsumer(ILogger<OrderPlacedConsumer> logger, IDynamoDBContext dynamoDbContext)
+    public OrderPlacedConsumer(ILogger<OrderPlacedConsumer> logger, UnitOfWork unitOfWork)
     {
         _logger = logger;
-        _dynamoDbContext = dynamoDbContext;
+        _unitOfWork = unitOfWork;
     }
 
     public async Task Consume(ConsumeContext<OrderPlaced> context)
@@ -39,7 +33,8 @@ public class OrderPlacedConsumer : IConsumer<OrderPlaced>
             RecordedAt = DateTime.UtcNow
         };
 
-        await _dynamoDbContext.SaveAsync(auditLog, context.CancellationToken);
+        _unitOfWork.Add(auditLog);
+        await _unitOfWork.CommitAsync(context.CancellationToken);
 
         _logger.LogInformation("Audit log written for OrderId={OrderId}", evt.OrderId);
     }

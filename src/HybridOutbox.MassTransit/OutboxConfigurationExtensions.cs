@@ -1,17 +1,18 @@
+using HybridOutbox.Abstractions;
 using HybridOutbox.MassTransit.Configuration;
 using HybridOutbox.MassTransit.Pipe;
 using MassTransit;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace HybridOutbox.MassTransit;
 
 public static class OutboxConfigurationExtensions
 {
     public static void AddHybridOutbox(
-        this IBusRegistrationConfigurator configurator,
-        Action<IHybridOutboxConfigurator>? configure = null)
+        this IBusRegistrationConfigurator configurator)
     {
-        var hybridOutboxConfigurator = new HybridOutboxConfigurator(configurator);
-        hybridOutboxConfigurator.Configure(configure);
+        var hybridOutboxConfigurator = new OutboxConfigurator(configurator);
+        hybridOutboxConfigurator.Configure();
     }
 
     public static void UseHybridOutbox(
@@ -21,9 +22,9 @@ public static class OutboxConfigurationExtensions
         ArgumentNullException.ThrowIfNull(configurator);
         ArgumentNullException.ThrowIfNull(context);
 
-        var observer = new OutboxConsumePipeSpecificationObserver(context);
+        var outboxObserver = new OutboxConsumePipeSpecificationObserver(context);
 
-        configurator.ConnectConsumerConfigurationObserver(observer);
-        configurator.ConnectSagaConfigurationObserver(observer);
+        configurator.ConnectConsumerConfigurationObserver(outboxObserver);
+        configurator.ConnectSagaConfigurationObserver(outboxObserver);
     }
 }

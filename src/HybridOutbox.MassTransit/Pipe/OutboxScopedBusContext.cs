@@ -6,14 +6,14 @@ using MassTransit.Transports;
 
 namespace HybridOutbox.MassTransit.Pipe;
 
-public class OutboxScopedBusContext<TBus> : ScopedBusContext
+public class OutboxScopedBusContext<TBus> :
+    ScopedBusContext
     where TBus : class, IBus
 {
     private readonly TBus _bus;
     private readonly IClientFactory _clientFactory;
     private readonly IServiceProvider _provider;
-    private readonly IOutboxStore _store;
-    private readonly OutboxDispatchContext _dispatchContext;
+    private readonly IOutboxContext _outboxContext;
 
     private IPublishEndpoint? _publishEndpoint;
     private ISendEndpointProvider? _sendEndpointProvider;
@@ -22,21 +22,19 @@ public class OutboxScopedBusContext<TBus> : ScopedBusContext
         TBus bus,
         IClientFactory clientFactory,
         IServiceProvider provider,
-        IOutboxStore store,
-        OutboxDispatchContext dispatchContext)
+        IOutboxContext outboxContext)
     {
         _bus = bus;
         _clientFactory = clientFactory;
         _provider = provider;
-        _store = store;
-        _dispatchContext = dispatchContext;
+        _outboxContext = outboxContext;
     }
 
     public ISendEndpointProvider SendEndpointProvider => _sendEndpointProvider ??=
-        new OutboxSendEndpointProvider(GetSendEndpointProvider(), _store, _dispatchContext);
+        new OutboxSendEndpointProvider(GetSendEndpointProvider(), _provider, _outboxContext);
 
     public IPublishEndpoint PublishEndpoint => _publishEndpoint ??=
-        new PublishEndpoint(new OutboxPublishEndpointProvider(GetPublishEndpointProvider(), _store, _dispatchContext));
+        new PublishEndpoint(new OutboxPublishEndpointProvider(GetPublishEndpointProvider(), _provider, _outboxContext));
 
     public IScopedClientFactory ClientFactory => GetClientFactory();
 

@@ -15,8 +15,9 @@ public sealed class DynamoDbTableInitializerTests
     private readonly IAmazonDynamoDB _dynamoDb = Substitute.For<IAmazonDynamoDB>();
     private const string TableName = "TestOutboxMessages";
 
-    private DynamoDbTableInitializer CreateInitializer(TimeSpan? retentionPeriod) =>
-        new(_dynamoDb,
+    private DynamoDbTableInitializer CreateInitializer(TimeSpan? retentionPeriod)
+    {
+        return new DynamoDbTableInitializer(_dynamoDb,
             Options.Create(new DynamoDbOutboxOptions
             {
                 TableName = TableName,
@@ -24,6 +25,7 @@ public sealed class DynamoDbTableInitializerTests
                 TtlAttributeName = "ExpiresAt"
             }),
             Substitute.For<ILogger<DynamoDbTableInitializer>>());
+    }
 
     private void SetupTableExists()
     {
@@ -92,7 +94,7 @@ public sealed class DynamoDbTableInitializerTests
     {
         SetupTableDoesNotExist();
 
-        await CreateInitializer(retentionPeriod: null).InitializeAsync();
+        await CreateInitializer(null).InitializeAsync();
 
         await _dynamoDb.DidNotReceive()
             .UpdateTimeToLiveAsync(Arg.Any<UpdateTimeToLiveRequest>(), Arg.Any<CancellationToken>());

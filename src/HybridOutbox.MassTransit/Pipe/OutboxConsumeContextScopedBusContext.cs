@@ -18,9 +18,8 @@ public class OutboxConsumeContextScopedBusContext<TBus> : OutboxScopedBusContext
         IClientFactory clientFactory,
         IServiceProvider provider,
         ConsumeContext consumeContext,
-        IOutboxStore store,
-        OutboxDispatchContext dispatchContext)
-        : base(bus, clientFactory, provider, store, dispatchContext)
+        IOutboxContext outboxContext)
+        : base(bus, clientFactory, provider, outboxContext)
     {
         _bus = bus;
         _clientFactory = clientFactory;

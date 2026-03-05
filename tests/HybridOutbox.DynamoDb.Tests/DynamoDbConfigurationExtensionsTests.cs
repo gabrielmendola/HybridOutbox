@@ -1,6 +1,7 @@
 using FluentAssertions;
 using HybridOutbox.Abstractions;
 using HybridOutbox.DynamoDb.Configuration;
+using HybridOutbox.DynamoDb.Internals;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -26,19 +27,19 @@ public sealed class DynamoDbConfigurationExtensionsTests
     }
 
     [Fact]
-    public void AddDynamoDb_RegistersIDynamoDbStore()
+    public void AddDynamoDb_RegistersIDynamoDbOutboxContext()
     {
         var services = BuildServices();
 
-        services.Should().Contain(d => d.ServiceType == typeof(IDynamoDbStore));
+        services.Should().Contain(d => d.ServiceType == typeof(IDynamoDbOutboxContext));
     }
 
     [Fact]
-    public void AddDynamoDb_RegistersIOutboxStore()
+    public void AddDynamoDb_RegistersIOutboxContext()
     {
         var services = BuildServices();
 
-        services.Should().Contain(d => d.ServiceType == typeof(IOutboxStore));
+        services.Should().Contain(d => d.ServiceType == typeof(IOutboxContext));
     }
 
     [Fact]
@@ -66,8 +67,8 @@ public sealed class DynamoDbConfigurationExtensionsTests
         services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
         services.AddHybridOutbox().AddDynamoDb(opts =>
         {
-            opts.TableName = "CustomTable";
-            opts.RetentionPeriod = TimeSpan.FromDays(30);
+            opts.Outbox.TableName = "CustomTable";
+            opts.Outbox.RetentionPeriod = TimeSpan.FromDays(30);
         });
 
         using var provider = services.BuildServiceProvider();
@@ -75,5 +76,41 @@ public sealed class DynamoDbConfigurationExtensionsTests
 
         options.TableName.Should().Be("CustomTable");
         options.RetentionPeriod.Should().Be(TimeSpan.FromDays(30));
+    }
+
+    [Fact]
+    public void AddDynamoDb_RegistersInboxServicesByDefault()
+    {
+        var services = BuildServices();
+
+        services.Should().Contain(d => d.ServiceType == typeof(IInboxRepository));
+    }
+
+    [Fact]
+    public void AddDynamoDb_WithDisableInbox_DoesNotRegisterInboxServices()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
+        services.AddHybridOutbox().DisableInbox().AddDynamoDb();
+
+        services.Should().NotContain(d => d.ImplementationType == typeof(DynamoDbInboxRepository));
+    }
+
+    [Fact]
+    public void AddDynamoDb_WithCustomInboxOptions_AppliesConfiguration()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
+        services.AddHybridOutbox().AddDynamoDb(opts =>
+        {
+            opts.Inbox.TableName = "CustomInboxTable";
+            opts.Inbox.RetentionPeriod = TimeSpan.FromDays(14);
+        });
+
+        using var provider = services.BuildServiceProvider();
+        var options = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DynamoDbInboxOptions>>().Value;
+
+        options.TableName.Should().Be("CustomInboxTable");
+        options.RetentionPeriod.Should().Be(TimeSpan.FromDays(14));
     }
 }

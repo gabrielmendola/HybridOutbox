@@ -1,18 +1,20 @@
 using HybridOutbox.Abstractions;
-using HybridOutbox.MassTransit.Pipe;
 using MassTransit;
 using MassTransit.Context;
 
-namespace HybridOutbox.MassTransit;
+namespace HybridOutbox.MassTransit.Pipe;
 
 public sealed class OutboxConsumeContext<TMessage> : ConsumeContextProxy<TMessage>
     where TMessage : class
 {
-    public OutboxConsumeContext(ConsumeContext<TMessage> context, IOutboxStore store, OutboxDispatchContext dispatchContext)
+    public OutboxConsumeContext(
+        ConsumeContext<TMessage> context,
+        IServiceProvider provider,
+        IOutboxContext outboxContext)
         : base(context)
     {
-        var outboxReceiveContext = new OutboxReceiveContext(context.ReceiveContext, store, dispatchContext);
-        
+        var outboxReceiveContext = new OutboxReceiveContext(context.ReceiveContext, provider, outboxContext);
+
         ReceiveContext = outboxReceiveContext;
         PublishEndpointProvider = outboxReceiveContext.PublishEndpointProvider;
     }

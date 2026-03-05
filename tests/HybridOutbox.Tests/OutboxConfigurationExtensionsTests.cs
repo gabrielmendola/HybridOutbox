@@ -58,16 +58,6 @@ public sealed class OutboxConfigurationExtensionsTests
     }
 
     [Fact]
-    public void AddHybridOutbox_RegistersOutboxDispatchContext()
-    {
-        using var provider = BuildProvider();
-
-        var context = provider.GetService<OutboxDispatchContext>();
-
-        context.Should().NotBeNull();
-    }
-
-    [Fact]
     public void AddHybridOutbox_RegistersNoOpJobLock()
     {
         using var provider = BuildProvider();
@@ -117,6 +107,7 @@ public sealed class OutboxConfigurationExtensionsTests
         options.Processing.Lock.Duration.Should().Be(TimeSpan.FromSeconds(60));
         options.InMemory.DispatchConcurrency.Should().Be(1);
         options.InMemory.Capacity.Should().BeNull();
+        options.Inbox.Enabled.Should().BeTrue();
     }
 
     [Fact]

@@ -6,51 +6,43 @@ namespace Sample.WebApi.Data;
 public sealed class UnitOfWork : IDisposable
 {
     private readonly IDynamoDBContext _context;
-    private readonly IDynamoDbStore _dynamoDbStore;
-    private IMultiTableTransactWrite _transaction;
+    private readonly IDynamoDbOutboxContext _outboxContext;
+    private List<ITransactWrite> _writes = [];
 
-    public UnitOfWork(
-        IDynamoDBContext context,
-        IDynamoDbStore dynamoDbStore)
+    public UnitOfWork(IDynamoDBContext context, IDynamoDbOutboxContext outboxContext)
     {
         _context = context;
-        _dynamoDbStore = dynamoDbStore;
-
-        _transaction = new MultiTableTransactWrite();
+        _outboxContext = outboxContext;
     }
 
     public void Add<T>(T entity) where T : class
     {
         var write = _context.CreateTransactWrite<T>();
         write.AddSaveItem(entity);
-        _transaction.AddTransactionPart(write);
+        _writes.Add(write);
     }
 
     public async Task CommitAsync(CancellationToken cancellationToken = default)
     {
-        ThrowIfNoTransaction();
+        var transaction = new MultiTableTransactWrite();
 
-        _transaction.AddTransactionPart(_dynamoDbStore.GetTransactWrite());
+        foreach (var write in _writes)
+            transaction.AddTransactionPart(write);
+        foreach (var write in _outboxContext.GetTransactWrite())
+            transaction.AddTransactionPart(write);
 
-        await _transaction.ExecuteAsync(cancellationToken);
-        _dynamoDbStore.DispatchMessages();
+        await transaction.ExecuteAsync(cancellationToken);
+        _outboxContext.DispatchMessages();
     }
 
     public void Rollback()
     {
-        ThrowIfNoTransaction();
-
-        _transaction = new MultiTableTransactWrite();
-        _dynamoDbStore.Clear();
-    }
-
-    private void ThrowIfNoTransaction()
-    {
-        if (_transaction is null) throw new InvalidOperationException($"No active transaction.");
+        _writes = [];
+        _outboxContext.Clear();
     }
 
     public void Dispose()
     {
-        _dynamoDbStore.Dispose();
+        _outboxContext.Dispose();
     }
 }
