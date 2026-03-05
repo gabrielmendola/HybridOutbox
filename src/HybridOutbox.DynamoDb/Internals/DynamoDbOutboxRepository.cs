@@ -20,9 +20,6 @@ internal sealed class DynamoDbOutboxRepository : IOutboxRepository
     private readonly OutboxOptions _options;
     private readonly ILogger<DynamoDbOutboxRepository> _logger;
 
-    private LoadConfig LoadCfg => new() { OverrideTableName = _dbOptions.TableName };
-    private SaveConfig SaveCfg => new() { OverrideTableName = _dbOptions.TableName };
-
     public DynamoDbOutboxRepository(
         IAmazonDynamoDB dynamoDb,
         IDynamoDBContext context,
@@ -48,12 +45,12 @@ internal sealed class DynamoDbOutboxRepository : IOutboxRepository
         var request = new QueryRequest
         {
             TableName = _dbOptions.TableName,
-            IndexName = _dbOptions.GsiName,
-            KeyConditionExpression = "IsProcessed = :notProcessed AND CreatedAt < :threshold",
+            IndexName = "PendingMark-CreatedAt-index",
+            KeyConditionExpression = "PendingMark = :mark AND CreatedAt < :threshold",
             FilterExpression = "attribute_not_exists(LockedAt) OR LockedAt < :lockExpiry",
             ExpressionAttributeValues = new Dictionary<string, AttributeValue>
             {
-                { ":notProcessed", new AttributeValue { N = "0" } },
+                { ":mark", Str(DynamoDbOutboxMessage.SortKey) },
                 { ":threshold", Str(threshold) },
                 { ":lockExpiry", Str(lockExpiry) }
             },
@@ -83,34 +80,32 @@ internal sealed class DynamoDbOutboxRepository : IOutboxRepository
     }
 
     public async Task MarkAsProcessedAsync(
-        string messageId,
+        Guid messageId,
         CancellationToken cancellationToken = default)
     {
-        var record = await _context.LoadAsync<DynamoDbOutboxMessage>(messageId, LoadCfg, cancellationToken);
-
-        if (record is null)
-        {
-            _logger.LogWarning("MarkAsProcessed: message {MessageId} not found", messageId);
-            return;
-        }
-
-        record.IsProcessed = 1;
-        record.ProcessedAt = DateTime.UtcNow;
-
         try
         {
-            await _context.SaveAsync(record, SaveCfg, cancellationToken);
+            await _dynamoDb.UpdateItemAsync(new UpdateItemRequest
+            {
+                TableName = _dbOptions.TableName,
+                Key = MessageKey(messageId),
+                UpdateExpression = "SET IsProcessed = :true, ProcessedAt = :now REMOVE PendingMark",
+                ConditionExpression = "attribute_exists(PK)",
+                ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+                {
+                    { ":true", new AttributeValue { BOOL = true } },
+                    { ":now", Str(Iso(DateTime.UtcNow)) }
+                }
+            }, cancellationToken);
         }
         catch (ConditionalCheckFailedException)
         {
-            _logger.LogDebug(
-                "MarkAsProcessed: concurrent update detected for message {MessageId}, skipping",
-                messageId);
+            _logger.LogWarning("MarkAsProcessed: message {MessageId} not found", messageId);
         }
     }
 
     public async Task<bool> TryAcquireLockAsync(
-        string messageId,
+        Guid messageId,
         TimeSpan lockDuration,
         CancellationToken cancellationToken = default)
     {
@@ -139,7 +134,7 @@ internal sealed class DynamoDbOutboxRepository : IOutboxRepository
         }
     }
 
-    public Task ReleaseLockAsync(string messageId, CancellationToken cancellationToken = default)
+    public Task ReleaseLockAsync(Guid messageId, CancellationToken cancellationToken = default)
     {
         return _dynamoDb.UpdateItemAsync(new UpdateItemRequest
         {
@@ -159,8 +154,12 @@ internal sealed class DynamoDbOutboxRepository : IOutboxRepository
         return new AttributeValue { S = value };
     }
 
-    private static Dictionary<string, AttributeValue> MessageKey(string messageId)
+    private static Dictionary<string, AttributeValue> MessageKey(Guid messageId)
     {
-        return new Dictionary<string, AttributeValue> { { "MessageId", new AttributeValue { S = messageId } } };
+        return new Dictionary<string, AttributeValue>
+        {
+            { "PK", new AttributeValue { S = messageId.ToString("D") } },
+            { "SK", new AttributeValue { S = DynamoDbOutboxMessage.SortKey } }
+        };
     }
 }

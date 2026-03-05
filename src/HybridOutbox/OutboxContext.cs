@@ -4,28 +4,32 @@ using Microsoft.Extensions.Logging;
 
 namespace HybridOutbox;
 
-public abstract class OutboxStore : IOutboxStore
+public abstract class OutboxContext : IOutboxContext
 {
-    private readonly Dictionary<string, OutboxMessage> _messages = new();
+    private readonly List<OutboxMessage> _messages = [];
     private readonly ChannelWriter<OutboxMessage> _channel;
-    private readonly ILogger<OutboxStore> _logger;
+    private readonly ILogger<OutboxContext> _logger;
+    private InboxMessage? _stagedInbox;
 
-    public OutboxStore(
-        ChannelWriter<OutboxMessage> channel,
-        ILogger<OutboxStore> logger)
+    protected OutboxContext(ChannelWriter<OutboxMessage> channel, ILogger<OutboxContext> logger)
     {
         _channel = channel;
         _logger = logger;
     }
 
+    protected InboxMessage? GetStagedInboxMessage()
+    {
+        return _stagedInbox;
+    }
+
     public virtual OutboxMessage[] GetUndispatchedMessages()
     {
-        return _messages.Values.ToArray();
+        return _messages.ToArray();
     }
 
     public void DispatchMessages()
     {
-        foreach (var message in _messages.Values)
+        foreach (var message in _messages)
             if (!_channel.TryWrite(message))
                 _logger.LogWarning(
                     "In-memory channel is full or closed for message {MessageId}. " +
@@ -35,7 +39,12 @@ public abstract class OutboxStore : IOutboxStore
 
     public void Add(OutboxMessage message)
     {
-        _messages.TryAdd(message.MessageId, message);
+        _messages.Add(message);
+    }
+
+    public void Add(InboxMessage message)
+    {
+        _stagedInbox = message;
     }
 
     public void Clear()
@@ -51,6 +60,10 @@ public abstract class OutboxStore : IOutboxStore
 
     protected virtual void Dispose(bool disposing)
     {
-        if (disposing) _messages.Clear();
+        if (disposing)
+        {
+            _messages.Clear();
+            _stagedInbox = null;
+        }
     }
 }

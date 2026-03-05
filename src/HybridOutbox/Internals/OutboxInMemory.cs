@@ -13,7 +13,6 @@ internal sealed class OutboxInMemory : BackgroundService
     private readonly ChannelReader<OutboxMessage> _channel;
     private readonly IOutboxDispatcher _dispatcher;
     private readonly IOutboxRepository _repository;
-    private readonly OutboxDispatchContext _dispatchContext;
     private readonly OutboxOptions _options;
     private readonly ILogger<OutboxInMemory> _logger;
 
@@ -21,7 +20,6 @@ internal sealed class OutboxInMemory : BackgroundService
         ChannelReader<OutboxMessage> channel,
         IOptions<OutboxOptions> options,
         IServiceProvider serviceProvider,
-        OutboxDispatchContext dispatchContext,
         ILogger<OutboxInMemory> logger)
     {
         var scopedServiceProvider = serviceProvider.CreateScope().ServiceProvider;
@@ -29,7 +27,6 @@ internal sealed class OutboxInMemory : BackgroundService
         _channel = channel;
         _dispatcher = scopedServiceProvider.GetRequiredService<IOutboxDispatcher>();
         _repository = scopedServiceProvider.GetRequiredService<IOutboxRepository>();
-        _dispatchContext = dispatchContext;
         _options = options.Value;
         _logger = logger;
     }
@@ -60,10 +57,7 @@ internal sealed class OutboxInMemory : BackgroundService
     {
         try
         {
-            using (_dispatchContext.BeginDispatch())
-            {
-                await _dispatcher.DispatchAsync(message, ct);
-            }
+            await _dispatcher.DispatchAsync(message, ct);
         }
         catch (OperationCanceledException)
         {

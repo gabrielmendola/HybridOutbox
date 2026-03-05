@@ -2,36 +2,28 @@ namespace HybridOutbox;
 
 public sealed class OutboxMessage
 {
-    public string MessageId { get; set; } = Guid.NewGuid().ToString();
+    public Guid MessageId { get; init; }
+    public Guid? CorrelationId { get; init; }
 
-    public string? DispatcherKind { get; set; }
-    public Dictionary<string, string> DispatcherContext { get; set; } = [];
+    public string? DispatcherKind { get; init; }
+    public Dictionary<string, string> DispatcherContext { get; init; } = [];
 
-    public string DestinationAddress { get; set; } = null!;
-    public string? SourceAddress { get; set; }
-    public string? ResponseAddress { get; set; }
-    public string? FaultAddress { get; set; }
+    public string? DestinationAddress { get; init; }
+    public string? SourceAddress { get; init; }
+    public string? ResponseAddress { get; init; }
+    public string? FaultAddress { get; init; }
 
-    public List<string> MessageType { get; set; } = [];
+    public string MessageType { get; init; } = string.Empty;
 
-    public string? ClrType { get; set; }
-    public string Body { get; set; } = null!;
-    public string ContentType { get; set; } = "application/json";
+    public string? ClrType { get; init; }
+    public string Body { get; init; } = null!;
+    public string ContentType { get; init; } = "application/json";
 
-    public string? CorrelationId { get; set; }
-    public string? ConversationId { get; set; }
-    public string? InitiatorId { get; set; }
-    public string? RequestId { get; set; }
+    public Dictionary<string, object> Headers { get; set; } = [];
 
-    public Dictionary<string, string> Headers { get; set; } = [];
-
-    public DateTime? SentAt { get; set; }
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-
-    public bool IsProcessed { get; set; }
-    public DateTime? ProcessedAt { get; set; }
-
-    public int? Version { get; set; }
-    public DateTime? LockedAt { get; set; }
-    public int RetryCount { get; set; }
+    public bool IsProcessed { get; init; }
+    public DateTime? ProcessedAt { get; init; }
+    public DateTime? SentAt { get; init; }
+    public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
+    public DateTime? LockedAt { get; init; }
 }

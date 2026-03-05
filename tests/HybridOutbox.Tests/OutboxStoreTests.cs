@@ -8,117 +8,113 @@ namespace HybridOutbox.Tests;
 
 public sealed class OutboxStoreTests
 {
-    private sealed class TestOutboxStore : OutboxStore
+    private static readonly Guid Id1 = new("00000000-0000-0000-0000-000000000001");
+    private static readonly Guid Id2 = new("00000000-0000-0000-0000-000000000002");
+    private static readonly Guid Id3 = new("00000000-0000-0000-0000-000000000003");
+    private static readonly Guid OverflowId = new("00000000-0000-0000-0000-000000000099");
+
+    private sealed class TestOutboxContext : OutboxContext
     {
-        public TestOutboxStore(ChannelWriter<OutboxMessage> channel, ILogger<OutboxStore> logger)
-            : base(channel, logger) { }
+        public TestOutboxContext(ChannelWriter<OutboxMessage> channel, ILogger<OutboxContext> logger)
+            : base(channel, logger)
+        {
+        }
     }
 
     private readonly Channel<OutboxMessage> _channel;
-    private readonly FakeLogger<OutboxStore> _logger;
-    private readonly TestOutboxStore _store;
+    private readonly FakeLogger<OutboxContext> _logger;
+    private readonly TestOutboxContext _outboxContext;
 
     public OutboxStoreTests()
     {
         _channel = Channel.CreateUnbounded<OutboxMessage>();
-        _logger = new FakeLogger<OutboxStore>();
-        _store = new TestOutboxStore(_channel.Writer, _logger);
+        _logger = new FakeLogger<OutboxContext>();
+        _outboxContext = new TestOutboxContext(_channel.Writer, _logger);
     }
 
     [Fact]
     public void Add_AddsMessageReturnedByGetUndispatched()
     {
-        var message = new OutboxMessage { MessageId = "msg-1", DestinationAddress = "queue://test" };
+        var message = new OutboxMessage { MessageId = Id1, DestinationAddress = "queue://test" };
 
-        _store.Add(message);
+        _outboxContext.Add(message);
 
-        _store.GetUndispatchedMessages().Should().ContainSingle(m => m.MessageId == "msg-1");
-    }
-
-    [Fact]
-    public void Add_DuplicateMessageId_IsIgnored()
-    {
-        var message = new OutboxMessage { MessageId = "msg-1" };
-
-        _store.Add(message);
-        _store.Add(message);
-
-        _store.GetUndispatchedMessages().Should().HaveCount(1);
+        _outboxContext.GetUndispatchedMessages().Should().ContainSingle(m => m.MessageId == Id1);
     }
 
     [Fact]
     public void GetUndispatchedMessages_ReturnsAllAddedMessages()
     {
-        _store.Add(new OutboxMessage { MessageId = "1" });
-        _store.Add(new OutboxMessage { MessageId = "2" });
-        _store.Add(new OutboxMessage { MessageId = "3" });
+        _outboxContext.Add(new OutboxMessage { MessageId = Id1 });
+        _outboxContext.Add(new OutboxMessage { MessageId = Id2 });
+        _outboxContext.Add(new OutboxMessage { MessageId = Id3 });
 
-        _store.GetUndispatchedMessages().Should().HaveCount(3);
+        _outboxContext.GetUndispatchedMessages().Should().HaveCount(3);
     }
 
     [Fact]
     public void GetUndispatchedMessages_ReturnsEmptyWhenNoMessagesAdded()
     {
-        _store.GetUndispatchedMessages().Should().BeEmpty();
+        _outboxContext.GetUndispatchedMessages().Should().BeEmpty();
     }
 
     [Fact]
     public void DispatchMessages_WritesAllMessagesToChannel()
     {
-        _store.Add(new OutboxMessage { MessageId = "1" });
-        _store.Add(new OutboxMessage { MessageId = "2" });
+        _outboxContext.Add(new OutboxMessage { MessageId = Id1 });
+        _outboxContext.Add(new OutboxMessage { MessageId = Id2 });
 
-        _store.DispatchMessages();
+        _outboxContext.DispatchMessages();
 
-        var ids = new List<string>();
+        var ids = new List<Guid>();
         while (_channel.Reader.TryRead(out var msg))
             ids.Add(msg.MessageId);
 
-        ids.Should().BeEquivalentTo(["1", "2"]);
+        ids.Should().BeEquivalentTo([Id1, Id2]);
     }
 
     [Fact]
     public void DispatchMessages_WhenChannelFull_LogsWarning()
     {
         var bounded = Channel.CreateBounded<OutboxMessage>(1);
-        var store = new TestOutboxStore(bounded.Writer, _logger);
+        var outboxContext = new TestOutboxContext(bounded.Writer, _logger);
 
-        bounded.Writer.TryWrite(new OutboxMessage { MessageId = "filler" });
+        bounded.Writer.TryWrite(new OutboxMessage { MessageId = Guid.NewGuid() });
 
-        store.Add(new OutboxMessage { MessageId = "overflow" });
-        store.DispatchMessages();
+        outboxContext.Add(new OutboxMessage { MessageId = OverflowId });
+        outboxContext.DispatchMessages();
 
-        _logger.HasWarning("overflow").Should().BeTrue();
+        _logger.HasWarning(OverflowId.ToString()).Should().BeTrue();
     }
 
     [Fact]
     public void Clear_RemovesAllMessages()
     {
-        _store.Add(new OutboxMessage { MessageId = "1" });
-        _store.Add(new OutboxMessage { MessageId = "2" });
+        _outboxContext.Add(new OutboxMessage { MessageId = Id1 });
+        _outboxContext.Add(new OutboxMessage { MessageId = Id2 });
 
-        _store.Clear();
+        _outboxContext.Clear();
 
-        _store.GetUndispatchedMessages().Should().BeEmpty();
+        _outboxContext.GetUndispatchedMessages().Should().BeEmpty();
     }
 
     [Fact]
     public void Dispose_ClearsMessages()
     {
-        _store.Add(new OutboxMessage { MessageId = "1" });
+        _outboxContext.Add(new OutboxMessage { MessageId = Id1 });
 
-        _store.Dispose();
+        _outboxContext.Dispose();
 
-        _store.GetUndispatchedMessages().Should().BeEmpty();
+        _outboxContext.GetUndispatchedMessages().Should().BeEmpty();
     }
 
     [Fact]
     public void DispatchMessages_AfterClear_WritesNothingToChannel()
     {
-        _store.Add(new OutboxMessage { MessageId = "1" });
-        _store.Clear();
+        _outboxContext.Add(new OutboxMessage { MessageId = Id1 });
+        _outboxContext.Clear();
 
-        _store.DispatchMessages();
+        _outboxContext.DispatchMessages();
 
         _channel.Reader.TryRead(out _).Should().BeFalse();
     }

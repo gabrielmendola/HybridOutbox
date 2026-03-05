@@ -1,10 +1,10 @@
-using HybridOutbox.Internals;
-
 namespace HybridOutbox.Abstractions;
 
-public interface IOutboxStore : IInternalOutboxStore
+public interface IOutboxContext : IDisposable
 {
     OutboxMessage[] GetUndispatchedMessages();
     void DispatchMessages();
+    void Add(OutboxMessage message);
+    void Add(InboxMessage message);
     void Clear();
 }

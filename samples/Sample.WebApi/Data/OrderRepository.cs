@@ -8,10 +8,15 @@ public class OrderRepository
 {
     private readonly IDynamoDBContext _context;
 
-    public OrderRepository(IDynamoDBContext context) => _context = context;
+    public OrderRepository(IDynamoDBContext context)
+    {
+        _context = context;
+    }
 
     public async Task<Order?> GetByIdAsync(string orderId, CancellationToken ct = default)
-        => await _context.LoadAsync<Order>(orderId, ct);
+    {
+        return await _context.LoadAsync<Order>(orderId, ct);
+    }
 
     public async Task<List<Order>> GetAllAsync(CancellationToken ct = default)
     {

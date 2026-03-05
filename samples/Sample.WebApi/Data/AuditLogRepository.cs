@@ -8,7 +8,10 @@ public class AuditLogRepository
 {
     private readonly IDynamoDBContext _context;
 
-    public AuditLogRepository(IDynamoDBContext context) => _context = context;
+    public AuditLogRepository(IDynamoDBContext context)
+    {
+        _context = context;
+    }
 
     public async Task<List<AuditLog>> GetAllAsync(CancellationToken ct = default)
     {

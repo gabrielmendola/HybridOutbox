@@ -1,180 +1,199 @@
 using HybridOutbox.Abstractions;
+using HybridOutbox.MassTransit.Internals;
 using MassTransit;
-using Newtonsoft.Json;
+using MassTransit.Context;
+using MassTransit.Initializers;
+using MassTransit.Transports;
+using MassTransit.Util;
 
 namespace HybridOutbox.MassTransit.Pipe;
 
 internal sealed class OutboxSendEndpoint : ISendEndpoint
 {
-    private readonly ISendEndpoint _sendEndpoint;
-    private readonly IOutboxStore _store;
-    private readonly OutboxDispatchContext _dispatchContext;
-    private readonly bool _isPublish;
-    private readonly Uri? _address;
+    private readonly ITransportSendEndpoint _endpoint;
+    private readonly IServiceProvider _provider;
+    private readonly IOutboxContext _outboxContext;
 
     internal OutboxSendEndpoint(
         ISendEndpoint sendEndpoint,
-        IOutboxStore store,
-        OutboxDispatchContext dispatchContext,
-        Uri? address = null,
-        bool isPublish = false)
+        IServiceProvider provider,
+        IOutboxContext outboxContext)
     {
-        _sendEndpoint = sendEndpoint;
-        _store = store;
-        _dispatchContext = dispatchContext;
-        _address = address;
-        _isPublish = isPublish;
-    }
-
-    public async Task Send<T>(T message, CancellationToken cancellationToken = default)
-        where T : class
-    {
-        if (_dispatchContext.IsOutboxDispatching)
-        {
-            await _sendEndpoint.Send(message, cancellationToken);
-            return;
-        }
-
-        _store.Add(BuildOutboxMessage(message));
-    }
-
-    public async Task Send<T>(T message, IPipe<SendContext<T>> pipe, CancellationToken cancellationToken = default)
-        where T : class
-    {
-        if (_dispatchContext.IsOutboxDispatching)
-        {
-            await _sendEndpoint.Send(message, pipe, cancellationToken);
-            return;
-        }
-
-        _store.Add(BuildOutboxMessage(message));
-    }
-
-    public async Task Send<T>(T message, IPipe<SendContext> pipe, CancellationToken cancellationToken = default)
-        where T : class
-    {
-        if (_dispatchContext.IsOutboxDispatching)
-        {
-            await _sendEndpoint.Send(message, pipe, cancellationToken);
-            return;
-        }
-
-        _store.Add(BuildOutboxMessage(message));
-    }
-
-    public async Task Send<T>(object message, CancellationToken cancellationToken = default)
-        where T : class
-    {
-        if (_dispatchContext.IsOutboxDispatching)
-        {
-            await _sendEndpoint.Send<T>(message, cancellationToken);
-            return;
-        }
-
-        await SendObject(message, typeof(T));
-    }
-
-    public async Task Send<T>(object message, IPipe<SendContext<T>> pipe, CancellationToken cancellationToken = default)
-        where T : class
-    {
-        if (_dispatchContext.IsOutboxDispatching)
-        {
-            await _sendEndpoint.Send(message, pipe, cancellationToken);
-            return;
-        }
-
-        await SendObject(message, typeof(T));
-    }
-
-    public async Task Send<T>(object message, IPipe<SendContext> pipe, CancellationToken cancellationToken = default)
-        where T : class
-    {
-        if (_dispatchContext.IsOutboxDispatching)
-        {
-            await _sendEndpoint.Send<T>(message, pipe, cancellationToken);
-            return;
-        }
-
-        await SendObject(message, typeof(T));
-    }
-
-    public async Task Send(object message, CancellationToken cancellationToken = default)
-    {
-        if (_dispatchContext.IsOutboxDispatching)
-        {
-            await _sendEndpoint.Send(message, cancellationToken);
-            return;
-        }
-
-        await SendObject(message, message.GetType());
-    }
-
-    public async Task Send(object message, Type messageType, CancellationToken cancellationToken = default)
-    {
-        if (_dispatchContext.IsOutboxDispatching)
-        {
-            await _sendEndpoint.Send(message, messageType, cancellationToken);
-            return;
-        }
-
-        await SendObject(message, messageType);
-    }
-
-    public async Task Send(object message, IPipe<SendContext> pipe, CancellationToken cancellationToken = default)
-    {
-        if (_dispatchContext.IsOutboxDispatching)
-        {
-            await _sendEndpoint.Send(message, pipe, cancellationToken);
-            return;
-        }
-
-        await SendObject(message, message.GetType());
-    }
-
-    public async Task Send(object message, Type messageType, IPipe<SendContext> pipe,
-        CancellationToken cancellationToken = default)
-    {
-        if (_dispatchContext.IsOutboxDispatching)
-        {
-            await _sendEndpoint.Send(message, messageType, pipe, cancellationToken);
-            return;
-        }
-
-        await SendObject(message, messageType);
+        _endpoint = sendEndpoint as ITransportSendEndpoint ??
+                    throw new ArgumentException("Must be a transport endpoint", nameof(sendEndpoint));
+        _provider = provider;
+        _outboxContext = outboxContext;
     }
 
     public ConnectHandle ConnectSendObserver(ISendObserver observer)
     {
-        return _sendEndpoint.ConnectSendObserver(observer);
+        return new EmptyConnectHandle();
     }
 
-    private Task SendObject(object message, Type messageType)
+    public Task<SendContext<T>> CreateSendContext<T>(T message, IPipe<SendContext<T>> pipe,
+        CancellationToken cancellationToken)
+        where T : class
     {
-        var buildMethod = typeof(OutboxSendEndpoint)
-            .GetMethod(nameof(BuildOutboxMessage),
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
-            .MakeGenericMethod(messageType);
-
-        var outboxMessage = (OutboxMessage)buildMethod.Invoke(this, [message])!;
-        _store.Add(outboxMessage);
-        return Task.CompletedTask;
+        return _endpoint.CreateSendContext(message, new OutboxSendEndpointPipe<T>(pipe, _provider), cancellationToken);
     }
 
-    private OutboxMessage BuildOutboxMessage<T>(T message) where T : class
+    public async Task Send<T>(T message, CancellationToken cancellationToken)
+        where T : class
     {
-        return new OutboxMessage
+        ArgumentNullException.ThrowIfNull(message);
+
+        var context = await _endpoint
+            .CreateSendContext(message, new OutboxSendEndpointPipe<T>(_provider), cancellationToken)
+            .ConfigureAwait(false);
+
+        await Send(context).ConfigureAwait(false);
+    }
+
+    public async Task Send<T>(T message, IPipe<SendContext<T>> pipe, CancellationToken cancellationToken)
+        where T : class
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        ArgumentNullException.ThrowIfNull(pipe);
+
+        var context = await _endpoint
+            .CreateSendContext(message, new OutboxSendEndpointPipe<T>(pipe, _provider), cancellationToken)
+            .ConfigureAwait(false);
+
+        await Send(context).ConfigureAwait(false);
+    }
+
+    public Task Send(object message, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+
+        var messageType = message.GetType();
+
+        return SendEndpointConverterCache.Send(this, message, messageType, cancellationToken);
+    }
+
+    public Task Send(object message, Type messageType, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        ArgumentNullException.ThrowIfNull(messageType);
+
+        return SendEndpointConverterCache.Send(this, message, messageType, cancellationToken);
+    }
+
+    public async Task Send<T>(T message, IPipe<SendContext> pipe, CancellationToken cancellationToken)
+        where T : class
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        ArgumentNullException.ThrowIfNull(pipe);
+
+        var context = await _endpoint
+            .CreateSendContext(message, new OutboxSendEndpointPipe<T>(pipe, _provider), cancellationToken)
+            .ConfigureAwait(false);
+
+        await Send(context).ConfigureAwait(false);
+    }
+
+    public Task Send(object message, IPipe<SendContext> pipe, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        ArgumentNullException.ThrowIfNull(pipe);
+
+        var messageType = message.GetType();
+
+        return SendEndpointConverterCache.Send(this, message, messageType, pipe, cancellationToken);
+    }
+
+    public Task Send(object message, Type messageType, IPipe<SendContext> pipe, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        ArgumentNullException.ThrowIfNull(messageType);
+        ArgumentNullException.ThrowIfNull(pipe);
+
+        return SendEndpointConverterCache.Send(this, message, messageType, pipe, cancellationToken);
+    }
+
+    public async Task Send<T>(object values, CancellationToken cancellationToken)
+        where T : class
+    {
+        ArgumentNullException.ThrowIfNull(values);
+
+        var (message, sendPipe) =
+            await MessageInitializerCache<T>
+                .InitializeMessage(values, new OutboxSendEndpointPipe<T>(_provider), cancellationToken)
+                .ConfigureAwait(false);
+
+        var context =
+            await _endpoint
+                .CreateSendContext(message, new OutboxSendEndpointPipe<T>(sendPipe, _provider), cancellationToken)
+                .ConfigureAwait(false);
+
+        await Send(context).ConfigureAwait(false);
+    }
+
+    public async Task Send<T>(object values, IPipe<SendContext<T>> pipe, CancellationToken cancellationToken)
+        where T : class
+    {
+        ArgumentNullException.ThrowIfNull(values);
+
+        var (message, sendPipe) =
+            await MessageInitializerCache<T>.InitializeMessage(values, new OutboxSendEndpointPipe<T>(pipe, _provider),
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+        var context =
+            await _endpoint
+                .CreateSendContext(message, new OutboxSendEndpointPipe<T>(sendPipe, _provider), cancellationToken)
+                .ConfigureAwait(false);
+
+        await Send(context).ConfigureAwait(false);
+    }
+
+    public async Task Send<T>(object values, IPipe<SendContext> pipe, CancellationToken cancellationToken)
+        where T : class
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        ArgumentNullException.ThrowIfNull(pipe);
+
+        var (message, sendPipe) =
+            await MessageInitializerCache<T>.InitializeMessage(values, new OutboxSendEndpointPipe<T>(pipe, _provider),
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+        var context =
+            await _endpoint
+                .CreateSendContext(message, new OutboxSendEndpointPipe<T>(sendPipe, _provider), cancellationToken)
+                .ConfigureAwait(false);
+
+        await Send(context).ConfigureAwait(false);
+    }
+
+    private async Task Send<T>(SendContext<T> context)
+        where T : class
+    {
+        var message = new OutboxMessage
         {
-            MessageId = Guid.NewGuid().ToString(),
-            DispatcherKind = Constants.DispatcherKind,
+            MessageId = context.MessageId.Value,
+            CorrelationId = context.CorrelationId,
+            DispatcherKind = OutboxConstants.DispatcherKind,
             DispatcherContext = new Dictionary<string, string>
             {
-                [Constants.ContextKeys.IsPublish] = _isPublish ? "true" : "false"
+                [OutboxConstants.ConversationId] = context.ConversationId.ToString(),
+                [OutboxConstants.InitiatorId] = context.InitiatorId?.ToString(),
+                [OutboxConstants.RequestId] = context.RequestId?.ToString()
             },
+            SentAt = context.SentTime ?? DateTime.UtcNow,
+            Headers = context.Headers.ToDictionary(x => x.Key, x => x.Value),
+            ContentType = context.ContentType?.ToString() ?? context.Serialization.DefaultContentType.ToString(),
+            MessageType = string.Join(";", context.SupportedMessageTypes),
             ClrType = typeof(T).AssemblyQualifiedName ?? typeof(T).FullName!,
-            MessageType = MessageTypeCache<T>.MessageTypeNames.ToList(),
-            Body = JsonConvert.SerializeObject(message),
-            DestinationAddress = _address?.ToString() ?? string.Empty,
-            SentAt = DateTime.UtcNow
+            Body = context.Serializer.GetMessageBody(context).GetString(),
+            SourceAddress = context.SourceAddress?.ToString(),
+            DestinationAddress = context.DestinationAddress?.ToString(),
+            ResponseAddress = context.ResponseAddress?.ToString(),
+            FaultAddress = context.FaultAddress?.ToString(),
+            // InboxMessageId = inboxMessageId,
+            // InboxConsumerId = inboxConsumerId
         };
+
+        _outboxContext.Add(message);
     }
 }

@@ -228,6 +228,9 @@ All options bind from the `HybridOutbox` configuration section:
 ```json
 {
   "HybridOutbox": {
+    "Inbox": {
+      "Enabled": true,
+    },
     "Job": {
       "Enabled": true,
       "Interval": "00:00:30",
@@ -253,6 +256,7 @@ All options bind from the `HybridOutbox` configuration section:
 
 | Option | Default | Description |
 |---|---|---|
+| `Inbox.Enabled` | `true` | Enable/disable the inbox |
 | `Job.Enabled` | `true` | Enable/disable the background recovery job |
 | `Job.Interval` | `30s` | How often the recovery job runs |
 | `Job.Lock.Duration` | `60s` | How long a single job instance holds the distributed lock |
@@ -262,6 +266,25 @@ All options bind from the `HybridOutbox` configuration section:
 | `InMemory.Enabled` | `true` | Enable/disable the in-memory fast-path channel |
 | `InMemory.Capacity` | `null` (unbounded) | Max messages in the in-memory channel |
 | `InMemory.DispatchConcurrency` | `1` | Number of parallel dispatch workers |
+
+### Inbox (consumer deduplication)
+
+HybridOutbox supports the inbox pattern to prevent duplicate processing of messages delivered by the broker. When enabled the MassTransit outbox middleware will:
+
+- On consumer entry: if the incoming message has a `MessageId` and the configured `IInboxRepository` reports the id already exists, the message handling is skipped.
+- If the id does not exist: an `InboxMessage` is added to the scoped outbox context and persisted together with your domain writes. Once the transaction commits the inbox entry records that the message was processed.
+
+Configuration
+
+- Enable/disable: `HybridOutbox:Inbox:Enabled` (default: `true`).
+
+```csharp
+builder.Services
+    .AddHybridOutbox(options =>
+    {
+        options.Inbox.Enabled = false;
+    })
+```
 
 ### DynamoDB options
 

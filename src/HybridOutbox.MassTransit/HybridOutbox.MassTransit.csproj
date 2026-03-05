@@ -1,20 +1,5 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-    <ItemGroup>
-        <InternalsVisibleTo Include="HybridOutbox.MassTransit.Tests"/>
-        <InternalsVisibleTo Include="DynamicProxyGenAssembly2"/>
-    </ItemGroup>
-
-    <ItemGroup>
-        <ProjectReference Include="..\HybridOutbox\HybridOutbox.csproj"/>
-    </ItemGroup>
-
-    <ItemGroup>
-        <PackageReference Include="GreenPipes" Version="4.0.1"/>
-        <PackageReference Include="MassTransit" Version="8.2.5"/>
-        <PackageReference Include="Newtonsoft.Json" Version="13.0.4"/>
-    </ItemGroup>
-
     <PropertyGroup>
         <TargetFramework>net8.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
@@ -33,7 +18,19 @@
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
-        <NoWarn>1591</NoWarn>
     </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="MassTransit" Version="8.2.5"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\HybridOutbox\HybridOutbox.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="HybridOutbox.MassTransit.Tests"/>
+        <InternalsVisibleTo Include="DynamicProxyGenAssembly2"/>
+    </ItemGroup>
 
 </Project>

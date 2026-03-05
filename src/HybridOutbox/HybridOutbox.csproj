@@ -18,7 +18,6 @@
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
-        <NoWarn>1591</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>
@@ -32,8 +31,6 @@
         <InternalsVisibleTo Include="HybridOutbox.MassTransit"/>
         <InternalsVisibleTo Include="HybridOutbox.Tests"/>
         <InternalsVisibleTo Include="HybridOutbox.MassTransit.Tests"/>
-        <InternalsVisibleTo Include="HybridOutbox.DynamoDb.IntegrationTests"/>
-        <InternalsVisibleTo Include="HybridOutbox.MassTransit.IntegrationTests"/>
         <InternalsVisibleTo Include="DynamicProxyGenAssembly2"/>
     </ItemGroup>
 

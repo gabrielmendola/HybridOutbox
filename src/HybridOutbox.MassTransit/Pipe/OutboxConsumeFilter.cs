@@ -1,5 +1,4 @@
-
-using HybridOutbox.Abstractions;
+using HybridOutbox.MassTransit.Internals;
 using MassTransit;
 using MassTransit.DependencyInjection;
 
@@ -9,21 +8,21 @@ public class OutboxConsumeFilter<TMessage> : IFilter<ConsumeContext<TMessage>>
     where TMessage : class
 {
     private readonly IConsumeScopeProvider _scopeProvider;
+    private readonly string _consumerType;
 
-    public OutboxConsumeFilter(IConsumeScopeProvider scopeProvider)
+    public OutboxConsumeFilter(IConsumeScopeProvider scopeProvider, string consumerType)
     {
         _scopeProvider = scopeProvider;
+        _consumerType = consumerType;
     }
-    
+
     public async Task Send(ConsumeContext<TMessage> context, IPipe<ConsumeContext<TMessage>> next)
     {
-        await using IConsumeScopeContext<TMessage> scope = await _scopeProvider.GetScope(context).ConfigureAwait(false);
+        await using var scope = await _scopeProvider.GetScope(context).ConfigureAwait(false);
 
-        var store = scope.GetService<IOutboxStore>();
-        var dispatchContext = scope.GetService<OutboxDispatchContext>();
-        var outboxContext = new OutboxConsumeContext<TMessage>(scope.Context, store, dispatchContext);
-        
-        await next.Send(outboxContext).ConfigureAwait(false);
+        var contextFactory = scope.GetService<IOutboxContextFactory>();
+
+        await contextFactory.Send(scope.Context, next, _consumerType).ConfigureAwait(false);
     }
 
     public void Probe(ProbeContext context)

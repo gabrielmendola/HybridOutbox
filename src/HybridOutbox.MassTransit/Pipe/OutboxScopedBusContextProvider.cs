@@ -14,8 +14,7 @@ public class OutboxScopedBusContextProvider<TBus> : IScopedBusContextProvider<TB
         Bind<TBus, IClientFactory> clientFactory,
         Bind<TBus, IScopedConsumeContextProvider> consumeContextProvider,
         IScopedConsumeContextProvider globalConsumeContextProvider,
-        IOutboxStore store,
-        OutboxDispatchContext dispatchContext,
+        IOutboxContext store,
         IServiceProvider serviceProvider)
     {
         if (consumeContextProvider.Value.HasContext)
@@ -28,14 +27,12 @@ public class OutboxScopedBusContextProvider<TBus> : IScopedBusContextProvider<TB
                 clientFactory.Value,
                 serviceProvider,
                 globalConsumeContextProvider.GetContext(),
-                store,
-                dispatchContext);
+                store);
         else
             Context = new OutboxScopedBusContext<TBus>(
                 bus,
                 clientFactory.Value,
                 serviceProvider,
-                store,
-                dispatchContext);
+                store);
     }
 }
