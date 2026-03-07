@@ -46,6 +46,17 @@ The core library defines abstractions that are independent of any specific datab
 | `HybridOutbox.DynamoDb` | **Persistence provider** — DynamoDB (outbox table + distributed job lock) |
 | `HybridOutbox.MassTransit` | **Transport provider** — MassTransit consumer middleware |
 
+### Target Frameworks
+
+All packages multi-target the following frameworks:
+
+| Framework | Supported |
+|---|---|
+| `netstandard2.0` | ✓ |
+| `net8.0` | ✓ |
+| `net9.0` | ✓ |
+| `net10.0` | ✓ |
+
 ### Extensibility
 
 Any persistence store or message transport can be supported by implementing the core interfaces:
@@ -53,7 +64,7 @@ Any persistence store or message transport can be supported by implementing the 
 | Interface | Role |
 |---|---|
 | `IOutboxRepository` | Query unprocessed messages, acquire/release per-message locks, mark as processed |
-| `IOutboxStore` | Scoped in-memory staging area; receives intercepted messages before commit |
+| `IOutboxContext` | Scoped in-memory staging area; receives intercepted messages before commit |
 | `IOutboxDispatcher` | Dispatches a single `OutboxMessage` to the broker |
 | `IOutboxJobLock` | Distributed lock to ensure only one pod runs the recovery job at a time |
 
@@ -85,8 +96,9 @@ builder.Services
     .AddHybridOutbox()
     .AddDynamoDb(options =>
     {
-        options.TableName = "MyOutbox";
-        options.RetentionPeriod = TimeSpan.FromDays(7); // TTL on processed messages
+        options.TableName = "MyOutbox"; // sets outbox, inbox, and lock tables at once
+        options.Outbox.RetentionPeriod = TimeSpan.FromDays(7); // TTL on processed messages
+        options.Inbox.RetentionPeriod = TimeSpan.FromDays(7);  // TTL on inbox entries
     });
 
 builder.Services.AddMassTransit(x =>
@@ -113,7 +125,7 @@ await initializer.InitializeAsync();
 
 ### 4. Use the outbox in a consumer
 
-Inject `UnitOfWork` (or your equivalent that uses `IOutboxStore`) and publish messages through the MassTransit `ConsumeContext`. The middleware intercepts `Publish`/`Send` and stages the messages alongside the domain write — nothing goes to the broker until `CommitAsync` is called.
+Inject `UnitOfWork` (or your equivalent that uses `IDynamoDbOutboxContext`) and publish messages through the MassTransit `ConsumeContext`. The middleware intercepts `Publish`/`Send` and stages the messages alongside the domain write — nothing goes to the broker until `CommitAsync` is called.
 
 ```csharp
 public class PlaceOrderConsumer : IConsumer<PlaceOrder>
@@ -149,39 +161,40 @@ public class PlaceOrderConsumer : IConsumer<PlaceOrder>
 
 ### What happens when you call `Publish` or `Send`
 
-The outbox middleware intercepts the call and invokes `IOutboxStore.Add(message)`. At this point the message exists **only in memory** — it has not been written to DynamoDB and has not been sent to RabbitMQ.
+The outbox middleware intercepts the call and invokes `IOutboxContext.Add(message)`. At this point the message exists **only in memory** — it has not been written to DynamoDB and has not been sent to RabbitMQ.
 
 ```
 context.Publish(new OrderPlaced { ... })
   → OutboxSendEndpoint.Send()
-    → IOutboxStore.Add(message)   ← in-memory only, not persisted yet
+    → IOutboxContext.Add(message)   ← in-memory only, not persisted yet
 ```
 
 ### What you must do: call `DispatchMessages()`
 
-You are responsible for persisting the staged messages and triggering dispatch. With the DynamoDB provider this is done through `IDynamoDbStore`, which gives you a DynamoDB transact write containing the outbox messages to combine with your own domain writes:
+You are responsible for persisting the staged messages and triggering dispatch. With the DynamoDB provider this is done through `IDynamoDbOutboxContext`, which gives you the DynamoDB transact writes (outbox messages and inbox entry) to combine with your own domain writes:
 
 ```csharp
-// 1. Get a transact write that includes the staged outbox messages.
-var outboxWrite = dynamoDbStore.GetTransactWrite();
+// 1. Get the transact writes that include the staged outbox (and inbox) messages.
+var outboxWrites = dynamoDbOutboxContext.GetTransactWrite(); // returns ITransactWrite[]
 
 // 2. Combine with your domain writes and execute — one atomic DynamoDB transaction.
 var txn = new MultiTableTransactWrite();
 txn.AddTransactionPart(domainWrite);
-txn.AddTransactionPart(outboxWrite);
+foreach (var write in outboxWrites)
+    txn.AddTransactionPart(write);
 await txn.ExecuteAsync(ct);
 
 // 3. Signal the in-memory channel so the fast path dispatches immediately.
 //    If this call is skipped or the process crashes here, the recovery job
 //    will pick up the persisted messages from DynamoDB and dispatch them.
-dynamoDbStore.DispatchMessages();
+dynamoDbOutboxContext.DispatchMessages();
 ```
 
 Steps 2 and 3 together are what `UnitOfWork.CommitAsync()` does in the sample project. If you never call this (or an equivalent), messages are **silently dropped** — they were never written to DynamoDB and the channel is never notified.
 
-### The `IOutboxStore` lifecycle
+### The `IOutboxContext` lifecycle
 
-`IDynamoDbStore` (and its base `IOutboxStore`) is registered as **scoped**. Each HTTP request or consumer invocation gets its own instance. This means:
+`IDynamoDbOutboxContext` (and its base `IOutboxContext`) is registered as **scoped**. Each HTTP request or consumer invocation gets its own instance. This means:
 
 - Messages staged in one scope are invisible to other scopes.
 - You must call `DispatchMessages()` within the **same scope** that staged the messages.
@@ -195,27 +208,43 @@ The sample project's `UnitOfWork` is the recommended way to coordinate domain wr
 public sealed class UnitOfWork : IDisposable
 {
     private readonly IDynamoDBContext _context;
-    private readonly IDynamoDbStore _dynamoDbStore;   // ← scoped outbox store
+    private readonly IDynamoDbOutboxContext _outboxContext;   // ← scoped outbox context
+    private List<ITransactWrite> _writes = [];
 
     public void Add<T>(T entity) where T : class
     {
         // Stage a domain entity write.
         var write = _context.CreateTransactWrite<T>();
         write.AddSaveItem(entity);
-        _transaction.AddTransactionPart(write);
+        _writes.Add(write);
     }
 
     public async Task CommitAsync(CancellationToken ct = default)
     {
-        // Merge outbox messages into the same DynamoDB transaction.
-        _transaction.AddTransactionPart(_dynamoDbStore.GetTransactWrite());
+        var transaction = new MultiTableTransactWrite();
+
+        // Add domain writes.
+        foreach (var write in _writes)
+            transaction.AddTransactionPart(write);
+
+        // Merge outbox (and inbox) messages into the same DynamoDB transaction.
+        foreach (var write in _outboxContext.GetTransactWrite())
+            transaction.AddTransactionPart(write);
 
         // Atomically write domain data + outbox messages.
-        await _transaction.ExecuteAsync(ct);
+        await transaction.ExecuteAsync(ct);
 
         // Trigger fast-path dispatch via the in-memory channel.
-        _dynamoDbStore.DispatchMessages();
+        _outboxContext.DispatchMessages();
     }
+
+    public void Rollback()
+    {
+        _writes = [];
+        _outboxContext.Clear();
+    }
+
+    public void Dispose() => _outboxContext.Dispose();
 }
 ```
 
@@ -229,7 +258,7 @@ All options bind from the `HybridOutbox` configuration section:
 {
   "HybridOutbox": {
     "Inbox": {
-      "Enabled": true,
+      "Enabled": true
     },
     "Job": {
       "Enabled": true,
@@ -271,10 +300,10 @@ All options bind from the `HybridOutbox` configuration section:
 
 HybridOutbox supports the inbox pattern to prevent duplicate processing of messages delivered by the broker. When enabled the MassTransit outbox middleware will:
 
-- On consumer entry: if the incoming message has a `MessageId` and the configured `IInboxRepository` reports the id already exists, the message handling is skipped.
+- On consumer entry: if the incoming message has a `MessageId` and the configured `IInboxRepository` reports the id already exists for that consumer type, the message handling is skipped.
 - If the id does not exist: an `InboxMessage` is added to the scoped outbox context and persisted together with your domain writes. Once the transaction commits the inbox entry records that the message was processed.
 
-Configuration
+Configuration:
 
 - Enable/disable: `HybridOutbox:Inbox:Enabled` (default: `true`).
 
@@ -286,34 +315,51 @@ builder.Services
     })
 ```
 
+Or via the fluent API:
+
+```csharp
+builder.Services
+    .AddHybridOutbox()
+    .DisableInbox()
+    .AddDynamoDb(...);
+```
+
 ### DynamoDB options
 
 Bind from the `HybridOutbox:DynamoDb` section or pass a delegate to `AddDynamoDb()`:
 
 | Option | Default | Description |
 |---|---|---|
-| `TableName` | `"OutboxMessages"` | DynamoDB outbox table name |
-| `GsiName` | `"IsProcessed-CreatedAt-index"` | GSI used by the recovery query |
-| `RetentionPeriod` | `7 days` | TTL for processed messages (`null` disables TTL) |
-| `TtlAttributeName` | `"ExpiresAt"` | DynamoDB TTL attribute name |
-| `LockTableName` | `null` | Dedicated table for the distributed job lock. When `null`, a sentinel item in the outbox table is used |
+| `Outbox.TableName` | `"HybridOutbox"` | DynamoDB table name for outbox messages |
+| `Outbox.GsiName` | `"IsProcessed-CreatedAt-index"` | GSI name (informational; table initializer creates `PendingMark-CreatedAt-index`) |
+| `Outbox.RetentionPeriod` | `7 days` | TTL for processed outbox messages (`null` disables TTL) |
+| `Outbox.TtlAttributeName` | `"ExpiresAt"` | DynamoDB TTL attribute name for outbox items |
+| `Inbox.TableName` | `"HybridOutbox"` | DynamoDB table name for inbox entries |
+| `Inbox.RetentionPeriod` | `7 days` | TTL for inbox entries (`null` disables TTL) |
+| `Lock.TableName` | `"HybridOutbox"` | DynamoDB table name for the distributed job lock |
+
+The convenience setter `options.TableName = "name"` sets `Outbox.TableName`, `Inbox.TableName`, and `Lock.TableName` at once (single-table mode).
+
+## DynamoDB Table Layout
+
+HybridOutbox uses a single DynamoDB table in a single-table design with the following key schema:
+
+| Entity | PK | SK |
+|---|---|---|
+| Outbox message | `{MessageId}` (S) | `"OUTBOX"` (S) |
+| Inbox entry | `{MessageId}` (S) | `"INBOX#{ConsumerType}"` (S) |
+| Job lock | `"__JOB_LOCK__"` (S) | `"LOCK"` (S) |
+
+A GSI named `PendingMark-CreatedAt-index` on `PendingMark (S)` + `CreatedAt (S)` is used for recovery queries. Unprocessed outbox messages have `PendingMark = "OUTBOX"`; this attribute is removed when the message is marked as processed, so it naturally falls out of the GSI.
 
 ## Distributed Job Lock
 
 In multi-pod deployments, only one instance should run the recovery job at a time. HybridOutbox uses DynamoDB conditional writes to implement a distributed lock:
 
 - The default `NoOpJobLock` (used when only `HybridOutbox` core is registered) always grants the lock — suitable for single-instance deployments.
-- `AddDynamoDb()` automatically replaces it with `DynamoDbJobLock`, which uses a sentinel item in DynamoDB to ensure only one pod runs the recovery job per tick.
+- `AddDynamoDb()` automatically replaces it with `DynamoDbJobLock`, which uses a sentinel item in the DynamoDB table to ensure only one pod runs the recovery job per tick.
 
-No extra configuration is needed. Optionally dedicate a separate table for the lock:
-
-```csharp
-.AddDynamoDb(options =>
-{
-    options.TableName = "MyOutbox";
-    options.LockTableName = "MyOutboxLock"; // separate table
-});
-```
+No extra configuration is needed. The lock item is stored in `Lock.TableName` (defaults to the same table as outbox and inbox).
 
 ## Running the Sample
 
@@ -335,7 +381,7 @@ docker-compose up --build
 ```
 POST /orders
   → publishEndpoint.Publish(PlaceOrder)  ← outbox intercepts, not sent yet
-  → CommitAsync()  ← PlaceOrder written to outbox table in DynamoDB
+  → unitOfWork.CommitAsync()  ← PlaceOrder written to outbox table in DynamoDB
     → in-memory channel dispatches PlaceOrder to RabbitMQ
       → PlaceOrderConsumer:
           1. stages Order write in UnitOfWork
