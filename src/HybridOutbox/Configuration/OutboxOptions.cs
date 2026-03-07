@@ -8,7 +8,7 @@ public sealed class OutboxOptions
     public JobOptions Job { get; set; } = new();
     public ProcessingOptions Processing { get; set; } = new();
     public InMemoryOptions InMemory { get; set; } = new();
-    
+
     public sealed class InboxOptions
     {
         public bool Enabled { get; set; } = true;
@@ -39,5 +39,4 @@ public sealed class OutboxOptions
     {
         public TimeSpan Duration { get; set; } = TimeSpan.FromSeconds(60);
     }
-    
 }

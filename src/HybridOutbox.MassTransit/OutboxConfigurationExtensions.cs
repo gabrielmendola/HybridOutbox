@@ -19,8 +19,8 @@ public static class OutboxConfigurationExtensions
         this IReceiveEndpointConfigurator configurator,
         IRegistrationContext context)
     {
-        ArgumentNullException.ThrowIfNull(configurator);
-        ArgumentNullException.ThrowIfNull(context);
+        if (configurator is null) throw new ArgumentNullException(nameof(configurator));
+        if (context is null) throw new ArgumentNullException(nameof(context));
 
         var outboxObserver = new OutboxConsumePipeSpecificationObserver(context);
 

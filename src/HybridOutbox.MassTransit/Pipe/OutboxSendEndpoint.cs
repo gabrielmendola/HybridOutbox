@@ -40,7 +40,7 @@ internal sealed class OutboxSendEndpoint : ISendEndpoint
     public async Task Send<T>(T message, CancellationToken cancellationToken)
         where T : class
     {
-        ArgumentNullException.ThrowIfNull(message);
+        if (message is null) throw new ArgumentNullException(nameof(message));
 
         var context = await _endpoint
             .CreateSendContext(message, new OutboxSendEndpointPipe<T>(_provider), cancellationToken)
@@ -52,8 +52,8 @@ internal sealed class OutboxSendEndpoint : ISendEndpoint
     public async Task Send<T>(T message, IPipe<SendContext<T>> pipe, CancellationToken cancellationToken)
         where T : class
     {
-        ArgumentNullException.ThrowIfNull(message);
-        ArgumentNullException.ThrowIfNull(pipe);
+        if (message is null) throw new ArgumentNullException(nameof(message));
+        if (pipe is null) throw new ArgumentNullException(nameof(pipe));
 
         var context = await _endpoint
             .CreateSendContext(message, new OutboxSendEndpointPipe<T>(pipe, _provider), cancellationToken)
@@ -64,7 +64,7 @@ internal sealed class OutboxSendEndpoint : ISendEndpoint
 
     public Task Send(object message, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(message);
+        if (message is null) throw new ArgumentNullException(nameof(message));
 
         var messageType = message.GetType();
 
@@ -73,8 +73,8 @@ internal sealed class OutboxSendEndpoint : ISendEndpoint
 
     public Task Send(object message, Type messageType, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(message);
-        ArgumentNullException.ThrowIfNull(messageType);
+        if (message is null) throw new ArgumentNullException(nameof(message));
+        if (messageType is null) throw new ArgumentNullException(nameof(messageType));
 
         return SendEndpointConverterCache.Send(this, message, messageType, cancellationToken);
     }
@@ -82,8 +82,8 @@ internal sealed class OutboxSendEndpoint : ISendEndpoint
     public async Task Send<T>(T message, IPipe<SendContext> pipe, CancellationToken cancellationToken)
         where T : class
     {
-        ArgumentNullException.ThrowIfNull(message);
-        ArgumentNullException.ThrowIfNull(pipe);
+        if (message is null) throw new ArgumentNullException(nameof(message));
+        if (pipe is null) throw new ArgumentNullException(nameof(pipe));
 
         var context = await _endpoint
             .CreateSendContext(message, new OutboxSendEndpointPipe<T>(pipe, _provider), cancellationToken)
@@ -94,8 +94,8 @@ internal sealed class OutboxSendEndpoint : ISendEndpoint
 
     public Task Send(object message, IPipe<SendContext> pipe, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(message);
-        ArgumentNullException.ThrowIfNull(pipe);
+        if (message is null) throw new ArgumentNullException(nameof(message));
+        if (pipe is null) throw new ArgumentNullException(nameof(pipe));
 
         var messageType = message.GetType();
 
@@ -104,9 +104,9 @@ internal sealed class OutboxSendEndpoint : ISendEndpoint
 
     public Task Send(object message, Type messageType, IPipe<SendContext> pipe, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(message);
-        ArgumentNullException.ThrowIfNull(messageType);
-        ArgumentNullException.ThrowIfNull(pipe);
+        if (message is null) throw new ArgumentNullException(nameof(message));
+        if (messageType is null) throw new ArgumentNullException(nameof(messageType));
+        if (pipe is null) throw new ArgumentNullException(nameof(pipe));
 
         return SendEndpointConverterCache.Send(this, message, messageType, pipe, cancellationToken);
     }
@@ -114,7 +114,7 @@ internal sealed class OutboxSendEndpoint : ISendEndpoint
     public async Task Send<T>(object values, CancellationToken cancellationToken)
         where T : class
     {
-        ArgumentNullException.ThrowIfNull(values);
+        if (values is null) throw new ArgumentNullException(nameof(values));
 
         var (message, sendPipe) =
             await MessageInitializerCache<T>
@@ -132,7 +132,7 @@ internal sealed class OutboxSendEndpoint : ISendEndpoint
     public async Task Send<T>(object values, IPipe<SendContext<T>> pipe, CancellationToken cancellationToken)
         where T : class
     {
-        ArgumentNullException.ThrowIfNull(values);
+        if (values is null) throw new ArgumentNullException(nameof(values));
 
         var (message, sendPipe) =
             await MessageInitializerCache<T>.InitializeMessage(values, new OutboxSendEndpointPipe<T>(pipe, _provider),
@@ -150,8 +150,8 @@ internal sealed class OutboxSendEndpoint : ISendEndpoint
     public async Task Send<T>(object values, IPipe<SendContext> pipe, CancellationToken cancellationToken)
         where T : class
     {
-        ArgumentNullException.ThrowIfNull(values);
-        ArgumentNullException.ThrowIfNull(pipe);
+        if (values is null) throw new ArgumentNullException(nameof(values));
+        if (pipe is null) throw new ArgumentNullException(nameof(pipe));
 
         var (message, sendPipe) =
             await MessageInitializerCache<T>.InitializeMessage(values, new OutboxSendEndpointPipe<T>(pipe, _provider),
@@ -189,7 +189,7 @@ internal sealed class OutboxSendEndpoint : ISendEndpoint
             SourceAddress = context.SourceAddress?.ToString(),
             DestinationAddress = context.DestinationAddress?.ToString(),
             ResponseAddress = context.ResponseAddress?.ToString(),
-            FaultAddress = context.FaultAddress?.ToString(),
+            FaultAddress = context.FaultAddress?.ToString()
             // InboxMessageId = inboxMessageId,
             // InboxConsumerId = inboxConsumerId
         };

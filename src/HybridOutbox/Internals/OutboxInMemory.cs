@@ -43,14 +43,46 @@ internal sealed class OutboxInMemory : BackgroundService
             "OutboxChannelConsumer started. Concurrency={Concurrency}",
             _options.InMemory.DispatchConcurrency);
 
-        return Parallel.ForEachAsync(
-            _channel.ReadAllAsync(stoppingToken),
-            new ParallelOptions
+        return ExecuteLoopAsync(stoppingToken);
+    }
+
+    private async Task ExecuteLoopAsync(CancellationToken stoppingToken)
+    {
+        var semaphore = new SemaphoreSlim(
+            _options.InMemory.DispatchConcurrency,
+            _options.InMemory.DispatchConcurrency);
+        var pending = new List<Task>();
+
+        try
+        {
+            while (await _channel.WaitToReadAsync(stoppingToken).ConfigureAwait(false))
             {
-                MaxDegreeOfParallelism = _options.InMemory.DispatchConcurrency,
-                CancellationToken = stoppingToken
-            },
-            (message, ct) => DispatchMessageAsync(message, ct));
+                while (_channel.TryRead(out var message))
+                {
+                    await semaphore.WaitAsync(stoppingToken).ConfigureAwait(false);
+                    var captured = message;
+                    pending.Add(Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await DispatchMessageAsync(captured, stoppingToken).ConfigureAwait(false);
+                        }
+                        finally
+                        {
+                            semaphore.Release();
+                        }
+                    }, stoppingToken));
+                }
+
+                pending.RemoveAll(t => t.IsCompleted);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
+        if (pending.Count > 0)
+            await Task.WhenAll(pending).ConfigureAwait(false);
     }
 
     private async ValueTask DispatchMessageAsync(OutboxMessage message, CancellationToken ct)

@@ -41,23 +41,35 @@ internal sealed class OutboxJob : BackgroundService
             "OutboxRecoveryJob started. Interval={Interval}, Threshold={Threshold}",
             _options.Job.Interval, _options.Processing.Threshold);
 
-        using var timer = new PeriodicTimer(_options.Job.Interval);
-
-        while (await timer.WaitForNextTickAsync(stoppingToken))
+        while (!stoppingToken.IsCancellationRequested)
         {
-            var acquired = await _jobLock.TryAcquireAsync(
-                _instanceId, _options.Job.Lock.Duration, stoppingToken);
-
-            if (!acquired)
+            try
             {
-                _logger.LogDebug("OutboxRecoveryJob: job lock not acquired, skipping tick");
-                continue;
+                await Task.Delay(_options.Job.Interval, stoppingToken);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
             }
 
-            await RunRecoveryAsync(stoppingToken);
+            await RunTickAsync(stoppingToken);
         }
 
         _logger.LogInformation("OutboxRecoveryJob stopped.");
+    }
+
+    private async Task RunTickAsync(CancellationToken ct)
+    {
+        var acquired = await _jobLock.TryAcquireAsync(
+            _instanceId, _options.Job.Lock.Duration, ct);
+
+        if (!acquired)
+        {
+            _logger.LogDebug("OutboxRecoveryJob: job lock not acquired, skipping tick");
+            return;
+        }
+
+        await RunRecoveryAsync(ct);
     }
 
     private async Task RunRecoveryAsync(CancellationToken ct)
