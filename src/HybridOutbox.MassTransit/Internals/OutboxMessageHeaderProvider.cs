@@ -20,15 +20,15 @@ internal class OutboxMessageHeaderProvider : IHeaderProvider
         if (!string.IsNullOrWhiteSpace(_massTransitMessage.ContentType))
             yield return new KeyValuePair<string, object>(MessageHeaders.ContentType, _massTransitMessage.ContentType!);
 
-        foreach (var (key, value) in _massTransitMessage.Headers)
-            switch (key)
+        foreach (var header in _massTransitMessage.Headers)
+            switch (header.Key)
             {
                 case MessageHeaders.MessageId:
                 case MessageHeaders.ContentType:
                     continue;
 
                 default:
-                    yield return new KeyValuePair<string, object>(key, value);
+                    yield return new KeyValuePair<string, object>(header.Key, header.Value);
                     break;
             }
     }
@@ -47,7 +47,7 @@ internal class OutboxMessageHeaderProvider : IHeaderProvider
             return true;
         }
 
-        var headerValue = _massTransitMessage.Headers.GetValueOrDefault(key);
+        _massTransitMessage.Headers.TryGetValue(key, out var headerValue);
         if (headerValue != null)
         {
             value = headerValue;

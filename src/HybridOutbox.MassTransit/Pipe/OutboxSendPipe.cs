@@ -30,7 +30,7 @@ internal class OutboxSendPipe : IPipe<SendContext>
         context.SourceAddress = _massTransitMessage.SourceAddress;
         context.ResponseAddress = _massTransitMessage.ResponseAddress;
         context.FaultAddress = _massTransitMessage.FaultAddress;
-        context.SupportedMessageTypes = _massTransitMessage.MessageType.Split(';', StringSplitOptions.RemoveEmptyEntries);
+        context.SupportedMessageTypes = _massTransitMessage.MessageType.Split([';'], StringSplitOptions.RemoveEmptyEntries);
 
         // if (_message.ExpirationTime.HasValue)
         //     context.TimeToLive = _message.ExpirationTime.Value.ToUniversalTime() - DateTime.UtcNow;
